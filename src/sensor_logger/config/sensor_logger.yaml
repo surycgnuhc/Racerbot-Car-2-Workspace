@@ -1,0 +1,24 @@
+sensor_logger_node:
+  ros__parameters:
+    # Which test vector this recording is. Must be one of the catalogue in
+    # sensor_logger/maneuvers.py (CATEGORIES): idle, start, stop, straight,
+    # turn_left, turn_right, reverse, free_drive. Unknown names refuse to
+    # start, so a typo cannot scatter data into a folder nobody checks.
+    # Normally set per run on the command line: category:=turn_left
+    category: free_drive
+    notes: ''            # free text, stored in metadata.json
+    # Empty = <workspace>/data_logs, found from where this package is installed.
+    log_root: ''
+
+    imu_topic: /sensors/imu/raw
+    scan_topic: /scan
+    odom_topic: /odom
+
+    # Units /sensors/imu/raw really carries. vesc_driver passes the VESC's
+    # own g and deg/s through unconverted (vesc_packet.cpp), not the m/s^2
+    # and rad/s sensor_msgs/Imu specifies. Change only if the IMU source
+    # changes.
+    imu_accel_unit: g
+    imu_gyro_unit: deg/s
+
+    status_period_sec: 5.0

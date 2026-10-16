@@ -19,3 +19,6 @@ frames_*.pdf
 # ~/.ros/odom_calibration/backups/; git history keeps every committed version.
 *.bak
 *.bak.*
+# sensor_logger recordings: large, per-car, never committed. Keep the README.
+data_logs/*
+!data_logs/README.md

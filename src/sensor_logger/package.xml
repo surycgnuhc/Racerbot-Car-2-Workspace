@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>sensor_logger</name>
+  <version>0.1.0</version>
+  <description>Subscribe-only IMU, LiDAR and odometry logger. Files each session under a test-vector category (turn_left, start, stop, ...) in the workspace's data_logs/ folder, and checks afterwards that the recording contains that maneuver.</description>
+  <maintainer email="cyruschung0603@gmail.com">Cyrus Chung</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>ament_index_python</depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

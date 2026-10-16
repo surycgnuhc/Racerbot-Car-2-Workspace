@@ -6,7 +6,32 @@ changes and new/removed parameters called out explicitly. Upstream
 submodule bumps don't go here (see `docs/git-setup.md`) — this file is
 for changes the team made.
 
-## 2026-09-27 (latest) — The dashboard moves to sfu-racerbot/web-dashboards
+## 2026-10-16 (latest) — `sensor_logger`: labelled IMU/LiDAR test vectors
+
+New package **`sensor_logger`** (subscribe-only, publishes to no topic).
+Records `/sensors/imu/raw`, `/scan` and `/odom` to CSV under the new
+`data_logs/<category>/<YYYYmmdd-HHMMSS>/` folder at the workspace root,
+where `category:=` is one of the test vectors `idle`, `start`, `stop`,
+`straight`, `turn_left`, `turn_right`, `reverse`, `free_drive`.
+`ros2 run sensor_logger summarize_session <dir>` labels every odometry
+sample and PASS/FAILs the recording against its category. See
+`docs/sensor-logging.md`.
+
+- **Still needs on-car validation:** the ROS node has not been run; only
+  its pure-Python modules are tested (168 tests, 66/66 mutants killed).
+  Procedure: `src/sensor_logger/README.md#testing-on-the-car`.
+- **Finding:** `/sensors/imu/raw` carries the VESC's g and deg/s
+  unconverted (`vesc_packet.cpp`, `vesc_driver.cpp`), not the m/s^2 and
+  rad/s `sensor_msgs/Imu` specifies. The logger records this in each
+  session's `metadata.json`. `docs/hardware-reference.md`'s "roughly 9.81
+  at rest" re-check probably expects the wrong number; unverified, since
+  the IMU reads zero.
+- `metadata.json` records `source`: `car`, `sim`, `mixed` or `unknown`,
+  from which nodes publish the recorded topics (`urg_node`/`sick_node`/
+  `vesc_to_odom_node`/`vesc_driver_node` = car, `gym_bridge_node` = sim).
+- `data_logs/*` is gitignored except its README.
+
+## 2026-09-27 — The dashboard moves to sfu-racerbot/web-dashboards
 
 `web_dashboard` and `usb_cam_stream` moved, with their git history
 (`git subtree split` here, `git subtree add` there), into
