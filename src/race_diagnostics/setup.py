@@ -29,6 +29,10 @@ setup(
             'race_diag_node = race_diagnostics.race_diag_node:main',
             'filter_log = race_diagnostics.filter_log:main',
             'summarize_run = race_diagnostics.summarize_run:main',
+            'bag_stats = race_diagnostics.bag_tools:stats_main',
+            'bag_window = race_diagnostics.bag_tools:window_main',
+            'bag_extract = race_diagnostics.bag_tools:extract_main',
+            'bag_find = race_diagnostics.bag_tools:find_main',
         ],
     },
 )

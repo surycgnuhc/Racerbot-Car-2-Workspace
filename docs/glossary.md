@@ -54,6 +54,10 @@ Running `source <script>` to load settings into your current terminal. Needed in
 
 The system that tracks where things are relative to each other. A "frame" is a coordinate system attached to something — the map, the car's body, the LiDAR. TF answers questions like "where is this LiDAR reading in map coordinates?"
 
+### Rosbag / bag
+
+A recording of topics: every message, with the time it arrived, saved to disk so it can be replayed or analysed later. `record_run.py` writes one into each run directory as `bag/`, in the MCAP file format. See [run-diagnostics.md](run-diagnostics.md#asking-questions-about-a-recording) for asking questions about one without reading it.
+
 ---
 
 ## This car

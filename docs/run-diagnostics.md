@@ -41,6 +41,10 @@ Afterwards:
 ros2 run race_diagnostics summarize_run ~/.ros/racerbot_runs/<dir>
 ```
 
+For questions `summarize_run` doesn't answer ("when did the battery sag?",
+"what happened at 1:05?"), see
+[Asking questions about a recording](#asking-questions-about-a-recording).
+
 **`| tee` is no longer strictly required, but is still the simplest option.**
 `summarize_run` can reconstruct an equivalent merged log on its own: ROS 2
 launch already writes every node's complete stdout to a loose
@@ -206,6 +210,193 @@ invisible unless you read that one field.
 
 ---
 
+## Asking questions about a recording
+
+`summarize_run` answers a fixed list of questions. For anything else, such as
+"when did the battery sag?" or "what was the car doing at 1:05?", there are
+four small commands that read the run's rosbag (the recording of every
+topic, see [glossary](glossary.md#rosbag--bag)) and print **a short answer, never the
+data itself**.
+
+**Highlights**
+
+- **The answer stays small however big the recording is.** An hour of
+  driving is about 140,000 [LiDAR](glossary.md#lidar) scans (sweeps of the
+  laser rangefinder). `bag_find` turns that into a handful of lines saying
+  when something happened.
+- **Built for AI agents as much as people.** Claude Code can run these and
+  read their output without ever loading the recording into its context,
+  so a long run doesn't overflow it. Most commands have `--json`.
+- **Noise-aware.** `--min-duration` drops single-sample glitches, and
+  `min()`/`max()`/`mean()` skip the NaN and inf readings a LiDAR reports
+  for missing beams.
+- **Needs no sourced ROS.** Copy a run folder to a laptop and run them
+  there. Message types are decoded from definitions stored inside the
+  recording, so `vesc_msgs` decodes even where it was never built.
+- **Read-only, not a ROS node.** It opens files and nothing else, so it
+  cannot affect the car.
+- **Limits:** it reads MCAP recordings only (the Jazzy default, which
+  `record_run.py` produces). It does not join two topics in one question:
+  find the moment on one topic, then look at everything around it with
+  `bag_window`.
+
+### One-time setup
+
+The commands need two Python libraries that are not part of ROS. Install
+them once per machine, then rebuild so the four commands exist.
+
+**Terminal: any, from `~/racerbot-ws`:**
+
+```bash
+pip install --user --break-system-packages mcap==1.6.0 mcap-ros2-support==0.6.0
+colcon build --symlink-install --packages-select race_diagnostics
+source install/setup.bash
+```
+
+`--break-system-packages` is how Ubuntu 24.04 lets pip install anything
+outside a virtual environment. With `--user` it only writes under
+`~/.local`, never into the system's own files.
+
+**Working when:** `ros2 run race_diagnostics bag_stats --help` prints a usage
+message.
+
+**If it doesn't:** "No executable found" means the rebuild or the
+`source install/setup.bash` step was skipped. If it says "reading
+recordings needs the mcap libraries", the pip install went to a different
+Python.
+
+### The four commands
+
+Every command takes the run directory first. It also accepts the run's
+`bag/` directory, or a single `.mcap` file. Times are seconds from the start of the recording
+(`65`) or minutes:seconds (`1:05`), on the command line and in the output.
+
+**Terminal: any, after `source install/setup.bash`.** None of these need
+the car or the driver stack running.
+
+```bash
+RUN=~/.ros/racerbot_runs/20261019-140211        # your run directory
+
+# 1. What is in it? Each topic's rate, its gaps, and how old its data was.
+ros2 run race_diagnostics bag_stats $RUN
+
+# 2. When did something happen? Prints one line per episode.
+ros2 run race_diagnostics bag_find $RUN /scan "min(ranges) < 0.4" --min-duration 0.05
+ros2 run race_diagnostics bag_find $RUN /joy "buttons[4] == 0"          # LB released
+
+# 3. What was going on around then? Every topic, long arrays summarised.
+ros2 run race_diagnostics bag_window $RUN --at 1:05 --span 2
+
+# 4. One value over time, as CSV, bucketed to 5 rows a second.
+ros2 run race_diagnostics bag_extract $RUN /odom twist.twist.linear.x --hz 5
+```
+
+**Working when:** `bag_stats` starts with a `Worth a look:` list. That list
+names every topic gap and every topic whose data arrived more than 0.15 s
+old (the "marginal" line in the pose-lag table above). If nothing is
+wrong, it says so.
+
+**If it doesn't:** every error is one line starting with `error:` that says
+what to do. A run recorded with `record_bag:=false` has no `bag/` at all,
+and the error says no recording was found.
+
+**Battery and motor questions need `/sensors/core` in the recording, and
+`record_run.py` does not record it by default.** Add it when you start the
+recorder if you will want it.
+
+**Terminal 1, the recorder, in place of the plain `record_run.py` command in
+the TL;DR:**
+
+```bash
+ros2 launch race_diagnostics record_run.py \
+  topics:="/scan /odom /slam_pose /drive /ackermann_cmd /teleop /tf /tf_static /map /joy /auto_map/drive /auto_race/drive /parameter_events /sensors/core"
+```
+
+**Working when:** it prints the run directory, exactly as the plain
+command does.
+
+**Terminal: any, after the run.** Battery questions then work:
+
+```bash
+ros2 run race_diagnostics bag_find $RUN /sensors/core "state.voltage_input < 10.5" --min-duration 0.1
+```
+
+**Working when:** it lists the episodes, or prints `Never true.` If it
+says `not in this recording: /sensors/core`, the run was recorded without
+that topic and the answer cannot be recovered.
+
+### Writing a question
+
+A condition or value is a small expression over one message's fields. The
+field names are the ones in the message definition, which `bag_window`
+shows you:
+
+| You want | Write |
+|---|---|
+| a field | `state.voltage_input`, `twist.twist.linear.x` |
+| one element of a list | `buttons[4]` (LB on the F710), `axes[-1]` |
+| the closest LiDAR return | `min(ranges)` (NaN and inf beams ignored) |
+| how many beams were missing | `nonfinite(ranges)` |
+| a combination | `drive.speed > 1 and min(ranges) < 1.0` |
+
+Allowed: `+ - * /`, `< <= > >= == !=`, `and or not`, and the functions
+`min max mean abs len nonfinite`. Anything else is refused before it runs.
+That matters because these commands are meant to be run by AI agents, and
+an expression must not be able to run code.
+
+### Noise: why a question can report events that didn't happen
+
+Real sensors produce single-sample glitches, like one voltage reading that
+dips for 20 ms or one LiDAR beam that bounces off dust. A plain threshold
+reports every one of them as an event. Two options fix that:
+
+- `--min-duration 0.1` ignores anything that lasted less than 0.1 s.
+- `--merge-gap 0.2` joins episodes less than 0.2 s apart, for a signal
+  hovering right at its threshold.
+
+`bag_extract` has the same problem in reverse. Its default `--agg mean`
+averages a short spike away. Use `--agg min` or `--agg max` when spikes are
+what you are looking for.
+
+<details>
+<summary>How it works, and how it's tested (safe to skip)</summary>
+
+- `bag_io.py` opens the recording with the pure-Python `mcap` library, merges
+  split files (`bag_0.mcap`, `bag_1.mcap`, …) by arrival time, and turns a
+  damaged or half-written file into a clear error.
+- `bag_query.py` does the arithmetic: timing statistics, episodes,
+  bucketing, and summarising long arrays. It has no ROS and no `mcap` in it.
+- `field_expr.py` is the expression language. It parses with Python's `ast`
+  and walks a whitelist; it never calls `eval()`.
+- `bag_tools.py` is the command line.
+- **Lag** is arrival time minus the message's own header stamp. `bag_stats`
+  reads the stamp straight from the first 12 bytes of each message rather
+  than decoding it, so a big message costs no more than a small one.
+
+There is no real recording in the repo, so the tests generate one.
+`test/fake_recording.py` writes a 60 s, two-file recording of the car
+circling. It adds bounded timing jitter, sensor noise, NaN/inf beams and
+one-sample glitches.
+
+It also contains five known events: an `/odom` dropout, a
+battery dip, a near-wall moment, a lag spike and an LB release. The tests
+check each command finds exactly those, with tolerances derived from the
+jitter bounds.
+
+**Terminal: any, from `~/racerbot-ws`,** to try the commands on it yourself:
+
+```bash
+python3 src/race_diagnostics/test/fake_recording.py /tmp/fake_run
+ros2 run race_diagnostics bag_stats /tmp/fake_run
+```
+
+**Working when:** `Worth a look:` names an `/odom` gap near 12 s and stale
+`/odom` data near 40 s, the two problems the generator planted there.
+
+</details>
+
+---
+
 ## Safety notes for anyone (or anything) changing this code
 
 Read [architecture.md](architecture.md) and
@@ -253,7 +444,10 @@ then automatic handover to pure pursuit]
 Run directory: ~/.ros/racerbot_runs/<dir>
 - launch.log       full terminal output of every node
 - events.jsonl     probe stream: pipeline state + pose lag
-- bag/             replayable with `ros2 bag play <dir>/bag --clock`
+- bag/             replayable with `ros2 bag play <dir>/bag --clock`.
+                   Do not read it directly: query it with bag_stats,
+                   bag_find, bag_window and bag_extract
+                   (docs/run-diagnostics.md#asking-questions-about-a-recording)
 - summarize_run output pasted below:
 
 <paste `ros2 run race_diagnostics summarize_run <dir>` here>

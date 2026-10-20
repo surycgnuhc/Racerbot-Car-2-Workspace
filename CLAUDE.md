@@ -30,7 +30,7 @@ colcon test --packages-select <pkg> && colcon test-result --verbose
 ```
 Verified 2026-08-22: unsourced, `src/pure_pursuit/test/` collects 185 of 274 and aborts on 5 collection errors, `gap_follow` hides 70, and `usb_cam_stream` collects nothing at all. **Never reach for `--continue-on-collection-errors`** — it turns that loud abort into a green run over a fifth of the suite. Compare the collected count against `grep -c '^def test' src/<pkg>/test/*.py`.
 
-`drive_intent`, `odom_calibration`, `race_diagnostics`, `racerbot_sim`, and (apart from one rclpy file) `web_dashboard` are pure Python and do run unsourced — that is the pattern to follow for any new package with non-trivial math or parsing: keep the logic importable without `rclpy` (`pure_pursuit/racing_math.py`, `web_dashboard/protocol.py`, all of `drive_intent`).
+`drive_intent`, `odom_calibration`, `race_diagnostics`, `racerbot_sim`, and (apart from one rclpy file) `web_dashboard` are pure Python and do run unsourced (`race_diagnostics`'s `test_bag_tools.py` needs `pip install --user --break-system-packages mcap==1.6.0 mcap-ros2-support==0.6.0` first, and fails collection loudly without it — install, don't skip) — that is the pattern to follow for any new package with non-trivial math or parsing: keep the logic importable without `rclpy` (`pure_pursuit/racing_math.py`, `web_dashboard/protocol.py`, all of `drive_intent`).
 
 Drive the car (manual):
 ```bash
